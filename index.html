@@ -272,7 +272,7 @@ function infoLine(si, i){ const s = S[si]; return `${s.s} · ${s.nm || ''} · ${
 function showReveal(si, i){
   const s = S[si], ex = s.s.split(':')[0], flag = ex === 'EGX' ? '🇪🇬' : ex === 'TADAWUL' ? '🇸🇦' : '🇺🇸';
   const el = $('reveal');
-  el.innerHTML = `<div class="rv-ex">${flag} ${ex === 'TADAWUL' ? 'Tadawul' : ex} · <b>${s.s.split(':')[1]}</b></div><div class="rv-nm">${s.nm || ''}</div><div class="rv-dt">${dlong(s.t[i])} · ${s.tf === 'W' ? 'Weekly' : 'Daily'}</div><div class="rv-real">✔ شارت حقيقي من السوق</div>`;
+  el.innerHTML = `<div class="rv-ex">${flag} ${ex === 'TADAWUL' ? 'Tadawul' : ex} · <b>${s.s.split(':')[1]}</b></div><div class="rv-nm">${s.nm || ''}</div><div class="rv-dt">${dlong(s.t[i])} · ${s.tf === 'W' ? 'Weekly' : 'Daily'}</div>`;
   el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   clearTimeout(revealT); revealT = setTimeout(() => { el.classList.remove('show'); el.hidden = true; }, 1350);
 }
