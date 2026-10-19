@@ -291,7 +291,9 @@ function draw(){
   const cw = (W - pl - pr) / n, y = v => pt + (hi - v) / (hi - lo) * (H - pt - pb), x = i => pl + (i - a + 0.5) * cw;
   VIEW._pl = pl; VIEW._cw = cw;
   ctx.font = '11px -apple-system,Arial'; ctx.textAlign = 'left'; ctx.lineWidth = 1;
-  for (let g = 0; g <= 4; g++) { const v = lo + (hi - lo) * g / 4, yy = y(v); ctx.strokeStyle = 'rgba(148,163,184,.12)'; ctx.beginPath(); ctx.moveTo(pl, yy); ctx.lineTo(W - pr, yy); ctx.stroke(); ctx.fillStyle = '#64748b'; ctx.fillText(fmt(v), W - pr + 4, yy + 4); }
+  { const raw = (hi - lo) / 4, p10 = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p10, step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p10;
+    const dec = step >= 1 ? 0 : step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3;
+    for (let k = Math.ceil(lo / step); k * step <= hi; k++) { const v = k * step, yy = y(v); ctx.strokeStyle = 'rgba(148,163,184,.12)'; ctx.beginPath(); ctx.moveTo(pl, yy); ctx.lineTo(W - pr, yy); ctx.stroke(); ctx.fillStyle = '#7c8aa0'; ctx.fillText(v.toFixed(dec), W - pr + 4, yy + 4); } }
   if (VIEW.hl != null) { ctx.fillStyle = 'rgba(251,191,36,.22)'; ctx.fillRect(x(VIEW.hl) - cw * 0.8, pt - 8, cw * 1.6, H - pt - pb + 8); }
   for (let i = a; i < shown; i++) {
     const o = s.o[i], c = s.c[i], col = c >= o ? '#26a69a' : '#ef5350';
@@ -309,15 +311,20 @@ function draw(){
     const ax = x(VIEW.hl), ay = y(s.h[VIEW.hl]) - 5;
     ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax - 7, ay - 12); ctx.lineTo(ax + 7, ay - 12); ctx.closePath(); ctx.fill();
   }
-  if (VIEW.sel != null) {
-    const sx = x(VIEW.sel), yt = y(s.h[VIEW.sel]), yb = y(s.l[VIEW.sel]);
+  (VIEW.sels || []).forEach(k => {
+    const sx = x(k), yt = y(s.h[k]), yb = y(s.l[k]);
     ctx.fillStyle = 'rgba(251,191,36,.18)'; ctx.fillRect(sx - cw * 0.5, pt - 4, cw, H - pt - pb + 4);
     ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]); ctx.strokeRect(sx - cw * 0.48, yt - 8, cw * 0.96, yb - yt + 16); ctx.setLineDash([]);
-    ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.moveTo(sx, yb + 12); ctx.lineTo(sx - 7, yb + 24); ctx.lineTo(sx + 7, yb + 24); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(sx, yb + 20, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.fillText('✓', sx, yb + 24);
+  });
+  if (VIEW.hover != null && !(VIEW.sels || []).includes(VIEW.hover)) {
+    const sx = x(VIEW.hover);
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.strokeRect(sx - cw * 0.5, pt - 4, cw, H - pt - pb + 4); ctx.setLineDash([]);
   }
   (VIEW.marks || []).forEach(m => {
     const cy = (y(s.h[m.i]) + y(s.l[m.i])) / 2, ry = Math.max(12, (y(s.l[m.i]) - y(s.h[m.i])) / 2 + 7);
-    ctx.strokeStyle = m.color; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(x(m.i), cy, Math.max(cw * 0.95, 10), ry, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = m.color; ctx.lineWidth = 2.5; if (m.dash) ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.ellipse(x(m.i), cy, Math.max(cw * 0.95, 10), ry, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
   });
   if (VIEW.showDates) {
     ctx.fillStyle = '#64748b'; ctx.font = '10px Arial'; ctx.textAlign = 'center';
@@ -419,10 +426,12 @@ function nextHunt(){
   let st = Math.max(0, i - pos); st = Math.min(st, s.c.length - len);
   const en = st + len; st = trimStart(s, st, i, 8);
   G.q = {t, e, si, i}; G.phase = 'hunt';
-  VIEW = {si, start: st, end: en, shown: null, hl: null, arrow: false, showDates: false, marks: []};
-  G.sel = null; cv.style.touchAction = 'none';
-  $('prompt').innerHTML = `🔍 المس الـ <span class="ltr" style="color:var(--acc)">${T[t].n}</span> (اسحب صباعك لو محتاج) وبعدين أكّد`;
-  setChoices([{k:'ok', label:'✓ تأكيد'}, {k:'give', label:'مش لاقيها 🤷'}], k => { if (k === 'give') huntAnswer(null); else if (G.sel != null) huntAnswer(G.sel); });
+  VIEW = {si, start: st, end: en, shown: null, hl: null, arrow: false, showDates: false, marks: [], sels: [], hover: null};
+  const targets = []; for (let k = st; k < en; k++) if (MID.get(si + ':' + k) === t) targets.push(k);
+  G.q.targets = targets; G.selSet = new Set(); cv.style.touchAction = 'none';
+  const nm = `<span class="ltr" style="color:var(--acc)">${T[t].n}</span>`;
+  $('prompt').innerHTML = targets.length > 1 ? `🔍 المس <b>كل</b> الـ ${nm}: فيه <b>${targets.length}</b>، وبعدين أكّد` : `🔍 المس الـ ${nm} وبعدين أكّد`;
+  setChoices([{k:'ok', label:'✓ تأكيد'}, {k:'give', label:'مش لاقيها 🤷'}], k => { if (k === 'give') huntAnswer([]); else if (G.selSet.size) huntAnswer([...G.selSet]); });
   $('choices').children[0].disabled = true;
   fitCanvas(); draw();
 }
@@ -434,40 +443,55 @@ function whyNot(s, i, t){
   if (fam !== 'doji' && pl !== T[t].pos) return `الشكل صح بس دي في <b>${pl === 'top' ? 'قمة' : 'قاع'}</b>، يعني دي <b class="ltr">${T[T[t].twin].n}</b>! المكان بيحدد الاسم.`;
   return 'قريبة، بس الشمعة صغيرة أوي مقارنة باللي قبلها.';
 }
-function huntAnswer(i){
+function huntAnswer(sel){
   if (G.phase !== 'hunt') return;
-  const t = G.q.t, si = G.q.si, s = S[si];
-  const ok = i != null && (REL.get(si + ':' + i) === t || MID.get(si + ':' + i) === t);
-  G.total++; G.per[t][1]++; if (ok) G.per[t][0]++;
-  record(t, ok); if (ok) correctAnswer(); else wrongAnswer(); stats();
+  const t = G.q.t, si = G.q.si, s = S[si], targets = G.q.targets;
+  const okC = i => REL.get(si + ':' + i) === t || MID.get(si + ':' + i) === t;
+  const wrongSel = sel.filter(i => !okC(i)), found = targets.filter(i => sel.includes(i)), missed = targets.filter(i => !sel.includes(i));
+  const perfect = sel.length > 0 && !wrongSel.length && !missed.length;
+  const partial = !perfect && sel.length > 0 && !wrongSel.length;
+  G.total++; G.per[t][1]++; if (perfect) G.per[t][0]++;
+  record(t, perfect);
+  if (perfect) { correctAnswer(); if (targets.length > 1) G.score += 5 * (targets.length - 1); }
+  else if (partial) { G.streak = 0; G.score += 5 * found.length; bump('sScore', 'pop'); sfx('reveal'); }
+  else wrongAnswer();
+  stats();
   showReveal(si, G.q.i);
-  const targets = []; for (let k = VIEW.start; k < VIEW.end; k++) if (MID.get(si + ':' + k) === t) targets.push(k);
-  VIEW.marks = targets.map(k => ({i:k, color:'#22c55e'}));
-  if (i != null && !targets.includes(i)) VIEW.marks.push({i, color: ok ? '#22c55e' : '#ef4444'});
-  VIEW.showDates = true; VIEW.sel = null; G.phase = 'done'; cv.style.touchAction = ''; draw();
+  VIEW.marks = targets.map(k => ({i:k, color:'#22c55e', dash: !sel.includes(k)}));
+  sel.filter(i => !targets.includes(i)).forEach(i => VIEW.marks.push({i, color: okC(i) ? '#22c55e' : '#ef4444'}));
+  VIEW.showDates = true; VIEW.sels = []; VIEW.hover = null; G.phase = 'done'; cv.style.touchAction = ''; draw();
   [...$('choices').children].forEach(b => b.disabled = true);
-  let html = ok ? `<div class="big">✅ صح! <bdi>${T[t].n}</bdi></div>` : `<div class="big">❌ ${i == null ? 'هي دي اللي في الدايرة الخضرا' : 'مش دي'}</div>`;
-  if (!ok && i != null) html += `<div>🔴 ${whyNot(s, i, t)}</div>`;
-  const ev = EV.find(e => e[0] === si && e[1] === (ok && i != null ? i : targets[0]));
-  if (ev) html += `<div style="margin-top:6px;color:var(--ok);font-weight:700">🟢 ${ok ? 'اللي اخترتها' : (targets.length > 1 ? 'الصح (أول دايرة خضرا)' : 'الصح (الدايرة الخضرا)')}:</div>` + explain(ev);
+  const n = `<bdi>${T[t].n}</bdi>`;
+  let html;
+  if (perfect) html = `<div class="big">✅ ${targets.length > 1 ? `لقيتهم كلهم (${found.length}/${targets.length}) ` : 'صح! '}${n}</div>`;
+  else if (partial) html = `<div class="big">🟡 لقيت ${found.length} من ${targets.length}</div><div>فاتتك ${missed.length === 1 ? 'واحدة' : missed.length}: الدايرة الخضرا المتقطعة.</div>`;
+  else if (!sel.length) html = `<div class="big">❌ ${targets.length > 1 ? 'هما اللي في الدواير الخضرا' : 'هي دي اللي في الدايرة الخضرا'}</div>`;
+  else html = `<div class="big">❌ اخترت شمعة غلط (الدايرة الحمرا)</div><div>🔴 ${whyNot(s, wrongSel[0], t)}</div>`;
+  const evI = found.length ? found[0] : targets[0];
+  const ev = EV.find(e => e[0] === si && e[1] === evI);
+  if (ev) html += `<div style="margin-top:6px;color:var(--ok);font-weight:700">🟢 ${found.length ? (targets.length > 1 ? 'واحدة من اللي لقيتها' : 'اللي اخترتها') : 'الصح'}:</div>` + explain(ev);
   $('fb').innerHTML = html;
   $('info').textContent = infoLine(si, G.q.i);
   setNext(true); $('btnNext').textContent = G.lives <= 0 ? 'النتيجة 🏁' : 'التالي ⏎';
 }
-function huntSelectAt(clientX){
-  if (!G || G.mode !== 'hunt' || G.phase !== 'hunt' || !VIEW) return;
-  const r = cv.getBoundingClientRect(), px = clientX - r.left;
-  const i = Math.floor((px - VIEW._pl) / VIEW._cw) + VIEW.start;
-  if (i >= VIEW.start && i < VIEW.end && i !== G.sel) {
-    G.sel = i; VIEW.sel = i; sfx('tick'); draw();
-    const ok = $('choices').children[0]; ok.disabled = false; ok.classList.add('confirm');
-  }
+// tap = toggle a candle; press + slide shows a preview, lifting the finger toggles that candle
+function huntIndexAt(clientX){
+  if (!G || G.mode !== 'hunt' || G.phase !== 'hunt' || !VIEW) return null;
+  const r = cv.getBoundingClientRect(), i = Math.floor((clientX - r.left - VIEW._pl) / VIEW._cw) + VIEW.start;
+  return i >= VIEW.start && i < VIEW.end ? i : null;
+}
+function toggleSel(i){
+  if (G.selSet.has(i)) G.selSet.delete(i); else G.selSet.add(i);
+  VIEW.sels = [...G.selSet]; sfx('tick'); draw();
+  const ok = $('choices').children[0], n = G.selSet.size;
+  ok.disabled = n === 0; ok.classList.toggle('confirm', n > 0);
+  const N = G.q.targets.length; ok.textContent = N > 1 ? `✓ تأكيد (${n}/${N})` : '✓ تأكيد';
 }
 let dragging = false;
-cv.addEventListener('pointerdown', ev => { if (G && G.mode === 'hunt' && G.phase === 'hunt') { dragging = true; try { cv.setPointerCapture(ev.pointerId); } catch(e) {} huntSelectAt(ev.clientX); } });
-cv.addEventListener('pointermove', ev => { if (dragging) huntSelectAt(ev.clientX); });
-['pointerup', 'pointercancel'].forEach(t => cv.addEventListener(t, () => { dragging = false; }));
-cv.addEventListener('click', ev => huntSelectAt(ev.clientX));
+cv.addEventListener('pointerdown', ev => { if (huntIndexAt(ev.clientX) === null && !(G && G.phase === 'hunt')) return; dragging = true; try { cv.setPointerCapture(ev.pointerId); } catch(e) {} VIEW.hover = huntIndexAt(ev.clientX); draw(); });
+cv.addEventListener('pointermove', ev => { if (!dragging) return; const i = huntIndexAt(ev.clientX); if (i !== VIEW.hover) { VIEW.hover = i; draw(); } });
+cv.addEventListener('pointerup', ev => { if (!dragging) return; dragging = false; const i = huntIndexAt(ev.clientX); VIEW.hover = null; if (i !== null) toggleSel(i); else draw(); });
+cv.addEventListener('pointercancel', () => { dragging = false; if (VIEW) { VIEW.hover = null; draw(); } });
 
 // ---------- end / menu ----------
 function finish(){
@@ -516,7 +540,7 @@ $('btnReset').onclick = () => { if (confirm('تصفّر التقدّم؟')) { ST
 document.addEventListener('keydown', ev => {
   if (!G || $('game').hidden) return;
   if (ev.key === 'Enter' && !$('btnNext').hidden) { next(); return; }
-  if (ev.key === 'Enter' && G.mode === 'hunt' && G.phase === 'hunt' && G.sel != null) { huntAnswer(G.sel); return; }
+  if (ev.key === 'Enter' && G.mode === 'hunt' && G.phase === 'hunt' && G.selSet && G.selSet.size) { huntAnswer([...G.selSet]); return; }
   const n = parseInt(ev.key, 10); if (!n) return;
   const b = $('choices').children[n - 1]; if (b && !b.disabled) b.click();
 });
